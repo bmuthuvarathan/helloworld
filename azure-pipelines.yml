@@ -1,0 +1,80 @@
+# Maven
+# Build your Java project and run tests with Apache Maven.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/java
+
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+
+- task: JavaToolInstaller@0
+  inputs:
+    versionSpec: '17'
+    jdkArchitectureOption: 'x64'
+    jdkSourceOption: 'PreInstalled'
+
+- task: Maven@4
+  inputs:
+    mavenPomFile: 'pom.xml'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'  
+    mavenAuthenticateFeed: false  
+    effectivePomSkip: false 
+#    sonarQubeRunAnalysis: true
+    sqMavenPluginVersionChoice: 'pom' 
+    goals: 'test surefire-report:report-only'
+
+# Preparar análisis de SonarQube
+- task: SonarQubePrepare@6
+  inputs:
+    SonarQube: 'PruebaTecnicaSmartTalent'
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: 'PruebaTecnica_PruebaTecnica_f0e36347-390b-4884-92fc-1b5faa31d53e'
+    cliProjectName: 'PruebaTecnica'
+    cliSources: '.'
+    extraProperties: sonar.java.binaries=target/classes
+
+# Ejecutar análisis de SonarQube
+- task: SonarQubeAnalyze@6
+  inputs:
+    jdkversion: 'JAVA_HOME_17_X64'
+
+# Publicar resultados de SonarQube
+- task: SonarQubePublish@6
+  inputs:
+    pollingTimeoutSec: '300'
+
+# Publicar Artefactos HTML
+- task: PublishPipelineArtifact@1
+  displayName: 'Publish Test Report'
+  inputs:
+    targetPath: 'target/site/surefire-report.html'
+    artifactName: 'TestReport'
+
+- task: Maven@4
+  displayName: 'Run OWASP Dependency Check'
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'org.owasp:dependency-check-maven:check'
+    options: '-Dformat=ALL'
+
+# Publicar Resultados de Análisis de Dependencias
+- task: PublishTestResults@2
+  displayName: 'Publish Dependency Check Test Results'
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: '**/dependency-check-report.xml'
+    searchFolder: '$(Build.SourcesDirectory)'
+
+- task: PublishPipelineArtifact@1
+  displayName: 'Publish Dependency Check Report'
+  inputs:
+    targetPath: '$(Build.SourcesDirectory)/target'
+    artifactName: 'DependencyCheckReport'
